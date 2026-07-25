@@ -52,7 +52,7 @@ function renderNav() {
     </div>
   `;
   sidebar.querySelectorAll('.item[data-view]').forEach(el => {
-    el.addEventListener('click', () => { setView(el.dataset.view); document.getElementById('sidebar').classList.remove('open'); });
+    el.addEventListener('click', () => { setView(el.dataset.view); closeSidebar(); });
   });
 }
 
@@ -226,9 +226,16 @@ async function renderManage(main) {
   }));
 }
 
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebar-backdrop').classList.remove('open');
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('hamburger').addEventListener('click', () => {
     document.getElementById('sidebar').classList.toggle('open');
+    document.getElementById('sidebar-backdrop').classList.toggle('open');
   });
+  document.getElementById('sidebar-backdrop').addEventListener('click', closeSidebar);
   render();
 });
