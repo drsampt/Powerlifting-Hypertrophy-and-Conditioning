@@ -117,6 +117,17 @@ function renderSetup(main) {
           <input name="timeline_weeks" type="number" min="4" max="52" value="32" required />
           <div class="help">4-52 weeks. 32 weeks maps to the canonical 4-phase linear cycle with a peak/test week.</div>
         </div>
+        <div class="grid cols-2">
+          <div class="field">
+            <label>Min Session Length (min)</label>
+            <input name="workout_duration_min" type="number" min="20" max="180" value="45" required />
+          </div>
+          <div class="field">
+            <label>Max Session Length (min)</label>
+            <input name="workout_duration_max" type="number" min="20" max="180" value="75" required />
+          </div>
+          <div class="help" style="grid-column: 1 / -1">How long you actually want each session to run. Exercise count is fit to this window — heavy main-lift days naturally get fewer total exercises than lighter accessory days at the same duration.</div>
+        </div>
         <div class="grid cols-3">
           <div class="field">
             <label>Squat 1RM (lbs)</label>
@@ -153,10 +164,16 @@ function renderSetup(main) {
     const fd = new FormData(e.target);
     const data = Object.fromEntries(fd.entries());
     data.timeline_weeks = Number(data.timeline_weeks);
+    data.workout_duration_min = Number(data.workout_duration_min);
+    data.workout_duration_max = Number(data.workout_duration_max);
     data.squat_max = data.squat_max ? Number(data.squat_max) : null;
     data.bench_max = data.bench_max ? Number(data.bench_max) : null;
     data.deadlift_max = data.deadlift_max ? Number(data.deadlift_max) : null;
     data.equipment = data.equipment ? data.equipment.split(',').map(s => s.trim()).filter(Boolean) : [];
+
+    if (data.workout_duration_min > data.workout_duration_max) {
+      return toast('Min session length cannot be greater than max.');
+    }
 
     const submitBtn = e.target.querySelector('button[type=submit]');
     submitBtn.disabled = true;

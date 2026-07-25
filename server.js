@@ -41,7 +41,7 @@ async function getProgramRow(programId) {
 // ---------------- Profile Management ----------------
 
 app.post('/api/profile', asyncRoute(async (req, res) => {
-  const { name, sport, experience_level, periodization_type, timeline_weeks, squat_max, bench_max, deadlift_max, equipment, injuries, goals } = req.body;
+  const { name, sport, experience_level, periodization_type, timeline_weeks, squat_max, bench_max, deadlift_max, equipment, injuries, goals, workout_duration_min, workout_duration_max } = req.body;
 
   if (!name || !sport || !experience_level || !periodization_type || !timeline_weeks) {
     return res.status(400).json({ error: 'name, sport, experience_level, periodization_type, and timeline_weeks are required.' });
@@ -50,17 +50,22 @@ app.post('/api/profile', asyncRoute(async (req, res) => {
   if (!Number.isFinite(weeks) || weeks < 4 || weeks > 52) {
     return res.status(400).json({ error: 'timeline_weeks must be between 4 and 52.' });
   }
+  const durationMin = Number(workout_duration_min) || 45;
+  const durationMax = Number(workout_duration_max) || 75;
+  if (durationMin < 20 || durationMax > 180 || durationMin > durationMax) {
+    return res.status(400).json({ error: 'workout_duration_min/max must be between 20 and 180 minutes, with min <= max.' });
+  }
 
   const userResult = await query('INSERT INTO tpb_users (name) VALUES ($1) RETURNING id', [name]);
   const user_id = userResult.rows[0].id;
 
   const profileResult = await query(
     `INSERT INTO tpb_profiles
-      (user_id, sport, experience_level, periodization_type, timeline_weeks, squat_max, bench_max, deadlift_max, equipment, injuries, goals)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      (user_id, sport, experience_level, periodization_type, timeline_weeks, squat_max, bench_max, deadlift_max, equipment, injuries, goals, workout_duration_min, workout_duration_max)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
      RETURNING id`,
     [user_id, sport, experience_level, periodization_type, weeks, squat_max || null, bench_max || null, deadlift_max || null,
-      equipment ? JSON.stringify(equipment) : null, injuries || null, goals || null]
+      equipment ? JSON.stringify(equipment) : null, injuries || null, goals || null, durationMin, durationMax]
   );
 
   res.json({ user_id, profile_id: profileResult.rows[0].id });

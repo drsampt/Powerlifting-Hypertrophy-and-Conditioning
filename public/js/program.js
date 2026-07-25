@@ -8,7 +8,7 @@ function renderProgram(main) {
   const p = State.program;
   main.innerHTML = `
     <h1>${p.sport[0].toUpperCase() + p.sport.slice(1)} Program</h1>
-    <p class="subtitle">#${p.program_id} · ${p.periodization_type} · ${p.total_weeks} weeks · Deloads: wk ${p.deload_weeks.join(', ')} · Testing wk ${p.testing_week}</p>
+    <p class="subtitle">#${p.program_id} · ${p.periodization_type} · ${p.total_weeks} weeks · Deloads: wk ${p.deload_weeks.join(', ')} · Testing wk ${p.testing_week}${p.workout_duration_min ? ` · Target session: ${p.workout_duration_min}-${p.workout_duration_max} min` : ''}</p>
     <div class="tabs">
       <button data-tab="overview" class="${ProgramView.activeTab === 'overview' ? 'active' : ''}">Overview</button>
       <button data-tab="week" class="${ProgramView.activeTab === 'week' ? 'active' : ''}">Week View</button>
@@ -75,14 +75,14 @@ function renderWeekTab(content, p) {
     <div id="week-days">
       ${weekData.days.map(day => `
         <div class="day-block">
-          <h4><span>${day.day_name} — ${day.workout_type}</span></h4>
+          <h4><span>${day.day_name} — ${day.workout_type}</span>${day.estimated_minutes ? `<span class="badge blue">~${day.estimated_minutes} min</span>` : ''}</h4>
           ${day.exercises.map(ex => `
             <div class="exercise-row">
               <span class="name">${ex.name}</span>
               <span class="meta">
                 ${ex.sets ? `${ex.sets}×${ex.reps ?? '-'}` : ''}
                 ${ex.rpe ? ` @ RPE ${ex.rpe}` : ''}
-                ${ex.prescribed_weight ? ` — ${ex.prescribed_weight} lbs (${ex.weight_percentage}%)` : ''}
+                ${ex.prescribed_weight ? ` — ${ex.prescribed_weight} lbs (${ex.weight_percentage}%)` : ex.sets && ex.reps ? ' — RPE-based (pick load to hit target reps/RPE)' : ''}
               </span>
             </div>
             ${ex.warmup_sets && ex.warmup_sets.length ? `
