@@ -52,6 +52,7 @@ function renderLogger(main) {
           ${ex ? `
             <div class="help" style="margin-bottom:14px">
               Prescribed: ${ex.sets}×${ex.reps ?? '-'} @ RPE ${ex.rpe ?? '-'} — ${ex.prescribed_weight ? ex.prescribed_weight + ' lbs' : 'bodyweight/N/A'}
+              ${ex.warmup_sets && ex.warmup_sets.length ? `<br/>Warm-up: ${ex.warmup_sets.map(w => `${w.weight}×${w.reps}`).join(' → ')} → <strong>${ex.prescribed_weight} lbs (top set)</strong>` : ''}
             </div>
             <form id="log-form">
               <div class="grid cols-2">

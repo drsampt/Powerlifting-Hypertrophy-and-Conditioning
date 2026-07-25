@@ -85,6 +85,11 @@ function renderWeekTab(content, p) {
                 ${ex.prescribed_weight ? ` — ${ex.prescribed_weight} lbs (${ex.weight_percentage}%)` : ''}
               </span>
             </div>
+            ${ex.warmup_sets && ex.warmup_sets.length ? `
+              <div class="warmup-row">
+                Warm-up: ${ex.warmup_sets.map(w => `${w.weight}×${w.reps}`).join(' → ')} → <strong>${ex.prescribed_weight} lbs (top set)</strong>
+              </div>
+            ` : ''}
           `).join('')}
         </div>
       `).join('')}
