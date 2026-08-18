@@ -1,0 +1,7 @@
+node_modules/
+training.db
+training.db-shm
+training.db-wal
+*.log
+.env
+.DS_Store
