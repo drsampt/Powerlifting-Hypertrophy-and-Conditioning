@@ -124,6 +124,42 @@ function renderSetup(main) {
         </div>
         <div class="grid cols-2">
           <div class="field">
+            <label>Training Goal</label>
+            <select name="goal_type" id="goal-type-select" required>
+              <option value="powerlifting" selected>Powerlifting (compete on the platform)</option>
+              <option value="powerbuilding">Powerbuilding (strength + physique)</option>
+              <option value="power_combo">Power Combo (custom blend — set the slider below)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Training Days / Week</label>
+            <select name="training_days_per_week" required>
+              <option value="3">3 (full-body each session)</option>
+              <option value="4" selected>4 (Upper/Lower A/B split)</option>
+              <option value="5">5 (Upper/Lower A/B + hypertrophy day)</option>
+            </select>
+          </div>
+        </div>
+        <div class="field">
+          <label>Powerlifting <span id="pl-emphasis-value">100</span>% ↔ Bodybuilding <span id="bb-emphasis-value">0</span>%</label>
+          <input name="pl_emphasis" id="pl-emphasis-slider" type="range" min="0" max="100" value="100" />
+          <div class="help">How much accessory volume, rep ranges, and taper specificity should lean toward pure strength vs. muscle-building. Locked to 100 for Powerlifting and 30 for Powerbuilding; freely adjustable for Power Combo.</div>
+        </div>
+        <div class="field">
+          <label>Weak Point to Prioritize</label>
+          <select name="weak_point_focus">
+            <option value="none" selected>None / balanced</option>
+            <option value="quads">Quads</option>
+            <option value="posterior_chain">Posterior Chain (hamstrings/glutes/back)</option>
+            <option value="chest">Chest</option>
+            <option value="back">Back</option>
+            <option value="shoulders_triceps">Shoulders/Triceps</option>
+            <option value="arms">Arms</option>
+          </select>
+          <div class="help">Accessory selection gets biased toward this muscle group first.</div>
+        </div>
+        <div class="grid cols-2">
+          <div class="field">
             <label>Min Session Length (min)</label>
             <input name="workout_duration_min" type="number" min="20" max="180" value="45" required />
           </div>
@@ -164,6 +200,29 @@ function renderSetup(main) {
     </div>
   `;
 
+  const goalSelect = document.getElementById('goal-type-select');
+  const plSlider = document.getElementById('pl-emphasis-slider');
+  const plLabel = document.getElementById('pl-emphasis-value');
+  const bbLabel = document.getElementById('bb-emphasis-value');
+  const GOAL_LOCKED_EMPHASIS = { powerlifting: 100, powerbuilding: 30 };
+  function syncEmphasisLabels() {
+    plLabel.textContent = plSlider.value;
+    bbLabel.textContent = 100 - plSlider.value;
+  }
+  function syncEmphasisToGoal() {
+    const locked = GOAL_LOCKED_EMPHASIS[goalSelect.value];
+    if (locked !== undefined) {
+      plSlider.value = locked;
+      plSlider.disabled = true;
+    } else {
+      plSlider.disabled = false;
+    }
+    syncEmphasisLabels();
+  }
+  goalSelect.addEventListener('change', syncEmphasisToGoal);
+  plSlider.addEventListener('input', syncEmphasisLabels);
+  syncEmphasisToGoal();
+
   document.getElementById('setup-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
@@ -175,6 +234,8 @@ function renderSetup(main) {
     data.bench_max = data.bench_max ? Number(data.bench_max) : null;
     data.deadlift_max = data.deadlift_max ? Number(data.deadlift_max) : null;
     data.equipment = data.equipment ? data.equipment.split(',').map(s => s.trim()).filter(Boolean) : [];
+    data.pl_emphasis = Number(plSlider.value);
+    data.training_days_per_week = Number(data.training_days_per_week);
 
     if (data.workout_duration_min > data.workout_duration_max) {
       return toast('Min session length cannot be greater than max.');

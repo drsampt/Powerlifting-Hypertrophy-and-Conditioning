@@ -9,6 +9,7 @@ function renderProgram(main) {
   main.innerHTML = `
     <h1>${p.sport[0].toUpperCase() + p.sport.slice(1)} Program</h1>
     <p class="subtitle">#${p.program_id} · ${p.periodization_type} · ${p.total_weeks} weeks · Deloads: wk ${p.deload_weeks.join(', ')}${p.overreach_week ? ` · Overreach wk ${p.overreach_week}` : ''}${p.taper_weeks && p.taper_weeks.length ? ` · Taper wk ${p.taper_weeks[0]}-${p.taper_weeks[p.taper_weeks.length - 1]}` : ''} · Testing wk ${p.testing_week}${p.workout_duration_min ? ` · Target session: ${p.workout_duration_min}-${p.workout_duration_max} min` : ''}</p>
+    <p class="subtitle" style="margin-top:-16px">${p.goal_type ? p.goal_type.replace('_', ' ') : 'powerlifting'}${p.pl_emphasis != null ? ` · PL/BB emphasis: ${p.pl_emphasis}/${100 - p.pl_emphasis}` : ''}${p.training_days_per_week ? ` · ${p.training_days_per_week}x/week` : ''}${p.weak_point_focus ? ` · Weak point: ${p.weak_point_focus.replace('_', ' ')}` : ''}</p>
     <div class="tabs">
       <button data-tab="overview" class="${ProgramView.activeTab === 'overview' ? 'active' : ''}">Overview</button>
       <button data-tab="week" class="${ProgramView.activeTab === 'week' ? 'active' : ''}">Week View</button>

@@ -99,8 +99,15 @@ app.use('/api/export', requireAuth);
 
 // ---------------- Profile Management ----------------
 
+const GOAL_TYPES = ['powerlifting', 'powerbuilding', 'power_combo'];
+const WEAK_POINTS = ['none', 'quads', 'posterior_chain', 'chest', 'back', 'shoulders_triceps', 'arms'];
+
 app.post('/api/profile', asyncRoute(async (req, res) => {
-  const { name, sport, experience_level, periodization_type, timeline_weeks, squat_max, bench_max, deadlift_max, equipment, injuries, goals, workout_duration_min, workout_duration_max } = req.body;
+  const {
+    name, sport, experience_level, periodization_type, timeline_weeks, squat_max, bench_max, deadlift_max,
+    equipment, injuries, goals, workout_duration_min, workout_duration_max,
+    goal_type, pl_emphasis, training_days_per_week, weak_point_focus
+  } = req.body;
 
   if (!name || !sport || !experience_level || !periodization_type || !timeline_weeks) {
     return res.status(400).json({ error: 'name, sport, experience_level, periodization_type, and timeline_weeks are required.' });
@@ -114,17 +121,35 @@ app.post('/api/profile', asyncRoute(async (req, res) => {
   if (durationMin < 20 || durationMax > 180 || durationMin > durationMax) {
     return res.status(400).json({ error: 'workout_duration_min/max must be between 20 and 180 minutes, with min <= max.' });
   }
+  const goalType = goal_type || 'powerlifting';
+  if (!GOAL_TYPES.includes(goalType)) {
+    return res.status(400).json({ error: `goal_type must be one of: ${GOAL_TYPES.join(', ')}.` });
+  }
+  const plEmphasis = pl_emphasis === undefined || pl_emphasis === null || pl_emphasis === '' ? 100 : Number(pl_emphasis);
+  if (!Number.isFinite(plEmphasis) || plEmphasis < 0 || plEmphasis > 100) {
+    return res.status(400).json({ error: 'pl_emphasis must be a number between 0 and 100.' });
+  }
+  const daysPerWeek = Number(training_days_per_week) || 4;
+  if (![3, 4, 5].includes(daysPerWeek)) {
+    return res.status(400).json({ error: 'training_days_per_week must be 3, 4, or 5.' });
+  }
+  const weakPoint = weak_point_focus && weak_point_focus !== 'none' ? weak_point_focus : null;
+  if (weakPoint && !WEAK_POINTS.includes(weakPoint)) {
+    return res.status(400).json({ error: `weak_point_focus must be one of: ${WEAK_POINTS.join(', ')}.` });
+  }
 
   const userResult = await query('INSERT INTO tpb_users (name) VALUES ($1) RETURNING id', [name]);
   const user_id = userResult.rows[0].id;
 
   const profileResult = await query(
     `INSERT INTO tpb_profiles
-      (user_id, account_id, sport, experience_level, periodization_type, timeline_weeks, squat_max, bench_max, deadlift_max, equipment, injuries, goals, workout_duration_min, workout_duration_max)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+      (user_id, account_id, sport, experience_level, periodization_type, timeline_weeks, squat_max, bench_max, deadlift_max, equipment, injuries, goals, workout_duration_min, workout_duration_max,
+       goal_type, pl_emphasis, training_days_per_week, weak_point_focus)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
      RETURNING id`,
     [user_id, req.account.id, sport, experience_level, periodization_type, weeks, squat_max || null, bench_max || null, deadlift_max || null,
-      equipment ? JSON.stringify(equipment) : null, injuries || null, goals || null, durationMin, durationMax]
+      equipment ? JSON.stringify(equipment) : null, injuries || null, goals || null, durationMin, durationMax,
+      goalType, plEmphasis, daysPerWeek, weakPoint]
   );
 
   res.json({ user_id, profile_id: profileResult.rows[0].id });
