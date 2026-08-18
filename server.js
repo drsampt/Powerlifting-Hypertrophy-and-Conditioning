@@ -10,6 +10,7 @@ const { generateProgram } = require('./lib/periodization');
 const { computeAdjustment } = require('./lib/adjustment');
 const { buildAnalytics, compareWeeks } = require('./lib/analytics');
 const { getSportExercises, getSubstitutions } = require('./lib/exercises');
+const { createAccount, findAccountByEmail, verifyPassword, createSessionToken, deleteToken, requireAuth } = require('./lib/auth');
 
 const app = express();
 app.use(cors());
@@ -31,12 +32,70 @@ function asyncRoute(handler) {
   });
 }
 
-async function getProgramRow(programId) {
-  const { rows } = await query('SELECT * FROM tpb_programs WHERE id = $1', [programId]);
+// Ownership check: joins through profile so we can confirm the requesting account
+// actually owns this program before returning or mutating it.
+async function getOwnedProgramRow(programId, accountId) {
+  const { rows } = await query(
+    `SELECT p.* FROM tpb_programs p
+     JOIN tpb_profiles pr ON pr.id = p.profile_id
+     WHERE p.id = $1 AND pr.account_id = $2`,
+    [programId, accountId]
+  );
   if (!rows.length) return null;
   const row = rows[0];
   return { ...row, program_data: row.program_data };
 }
+
+async function getOwnedProfileRow(profileId, accountId) {
+  const { rows } = await query('SELECT * FROM tpb_profiles WHERE id = $1 AND account_id = $2', [profileId, accountId]);
+  return rows[0] || null;
+}
+
+// ---------------- Auth ----------------
+
+app.post('/api/auth/signup', asyncRoute(async (req, res) => {
+  const { email, password, name } = req.body;
+  if (!email || !password || password.length < 8) {
+    return res.status(400).json({ error: 'email and a password of at least 8 characters are required.' });
+  }
+  if (await findAccountByEmail(email)) {
+    return res.status(409).json({ error: 'An account with that email already exists.' });
+  }
+  const account = await createAccount(email, password, name);
+  const token = await createSessionToken(account.id);
+  res.json({ token, account });
+}));
+
+app.post('/api/auth/login', asyncRoute(async (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password) return res.status(400).json({ error: 'email and password are required.' });
+  const account = await findAccountByEmail(email);
+  if (!account || !verifyPassword(password, account.password_salt, account.password_hash)) {
+    return res.status(401).json({ error: 'Invalid email or password.' });
+  }
+  const token = await createSessionToken(account.id);
+  res.json({ token, account: { id: account.id, email: account.email, name: account.name } });
+}));
+
+app.post('/api/auth/logout', requireAuth, asyncRoute(async (req, res) => {
+  await deleteToken(req.authToken);
+  res.json({ loggedOut: true });
+}));
+
+app.get('/api/auth/me', requireAuth, (req, res) => {
+  res.json({ account: req.account });
+});
+
+app.use('/api/profile', requireAuth);
+app.use('/api/generate-program', requireAuth);
+app.use('/api/program', requireAuth);
+app.use('/api/programs', requireAuth);
+app.use('/api/log-session', requireAuth);
+app.use('/api/sessions', requireAuth);
+app.use('/api/session', requireAuth);
+app.use('/api/progress', requireAuth);
+app.use('/api/compare', requireAuth);
+app.use('/api/export', requireAuth);
 
 // ---------------- Profile Management ----------------
 
@@ -61,10 +120,10 @@ app.post('/api/profile', asyncRoute(async (req, res) => {
 
   const profileResult = await query(
     `INSERT INTO tpb_profiles
-      (user_id, sport, experience_level, periodization_type, timeline_weeks, squat_max, bench_max, deadlift_max, equipment, injuries, goals, workout_duration_min, workout_duration_max)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      (user_id, account_id, sport, experience_level, periodization_type, timeline_weeks, squat_max, bench_max, deadlift_max, equipment, injuries, goals, workout_duration_min, workout_duration_max)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
      RETURNING id`,
-    [user_id, sport, experience_level, periodization_type, weeks, squat_max || null, bench_max || null, deadlift_max || null,
+    [user_id, req.account.id, sport, experience_level, periodization_type, weeks, squat_max || null, bench_max || null, deadlift_max || null,
       equipment ? JSON.stringify(equipment) : null, injuries || null, goals || null, durationMin, durationMax]
   );
 
@@ -72,9 +131,8 @@ app.post('/api/profile', asyncRoute(async (req, res) => {
 }));
 
 app.get('/api/profile/:id', asyncRoute(async (req, res) => {
-  const { rows } = await query('SELECT * FROM tpb_profiles WHERE id = $1', [req.params.id]);
-  if (!rows.length) return res.status(404).json({ error: 'Profile not found.' });
-  const row = rows[0];
+  const row = await getOwnedProfileRow(req.params.id, req.account.id);
+  if (!row) return res.status(404).json({ error: 'Profile not found.' });
   res.json({ ...row, equipment: row.equipment ? JSON.parse(row.equipment) : [] });
 }));
 
@@ -82,9 +140,8 @@ app.get('/api/profile/:id', asyncRoute(async (req, res) => {
 
 app.post('/api/generate-program', asyncRoute(async (req, res) => {
   const { profile_id } = req.body;
-  const { rows } = await query('SELECT * FROM tpb_profiles WHERE id = $1', [profile_id]);
-  if (!rows.length) return res.status(404).json({ error: 'Profile not found.' });
-  const profile = rows[0];
+  const profile = await getOwnedProfileRow(profile_id, req.account.id);
+  if (!profile) return res.status(404).json({ error: 'Profile not found.' });
 
   const programData = generateProgram(profile);
   const insertResult = await query(
@@ -97,13 +154,13 @@ app.post('/api/generate-program', asyncRoute(async (req, res) => {
 }));
 
 app.get('/api/program/:program_id', asyncRoute(async (req, res) => {
-  const program = await getProgramRow(req.params.program_id);
+  const program = await getOwnedProgramRow(req.params.program_id, req.account.id);
   if (!program) return res.status(404).json({ error: 'Program not found.' });
   res.json({ program_id: program.id, profile_id: program.profile_id, status: program.status, created_at: program.created_at, ...program.program_data });
 }));
 
 app.put('/api/program/:program_id', asyncRoute(async (req, res) => {
-  const existing = await getProgramRow(req.params.program_id);
+  const existing = await getOwnedProgramRow(req.params.program_id, req.account.id);
   if (!existing) return res.status(404).json({ error: 'Program not found.' });
   const updated = { ...existing.program_data, ...req.body };
   await query('UPDATE tpb_programs SET program_data = $1 WHERE id = $2', [JSON.stringify(updated), req.params.program_id]);
@@ -111,8 +168,9 @@ app.put('/api/program/:program_id', asyncRoute(async (req, res) => {
 }));
 
 app.delete('/api/program/:program_id', asyncRoute(async (req, res) => {
-  const result = await query('DELETE FROM tpb_programs WHERE id = $1', [req.params.program_id]);
-  if (result.rowCount === 0) return res.status(404).json({ error: 'Program not found.' });
+  const existing = await getOwnedProgramRow(req.params.program_id, req.account.id);
+  if (!existing) return res.status(404).json({ error: 'Program not found.' });
+  await query('DELETE FROM tpb_programs WHERE id = $1', [req.params.program_id]);
   res.json({ deleted: true });
 }));
 
@@ -122,21 +180,23 @@ app.get('/api/programs', asyncRoute(async (req, res) => {
     FROM tpb_programs p
     JOIN tpb_profiles pr ON pr.id = p.profile_id
     JOIN tpb_users u ON u.id = pr.user_id
+    WHERE pr.account_id = $1
     ORDER BY p.created_at DESC
-  `);
+  `, [req.account.id]);
   res.json(rows);
 }));
 
 app.post('/api/program/:program_id/archive', asyncRoute(async (req, res) => {
+  const existing = await getOwnedProgramRow(req.params.program_id, req.account.id);
+  if (!existing) return res.status(404).json({ error: 'Program not found.' });
   await query("UPDATE tpb_programs SET status = 'archived' WHERE id = $1", [req.params.program_id]);
   res.json({ archived: true });
 }));
 
 app.post('/api/program/:program_id/clone', asyncRoute(async (req, res) => {
-  const existing = await getProgramRow(req.params.program_id);
+  const existing = await getOwnedProgramRow(req.params.program_id, req.account.id);
   if (!existing) return res.status(404).json({ error: 'Program not found.' });
-  const { rows } = await query('SELECT * FROM tpb_profiles WHERE id = $1', [existing.profile_id]);
-  const profile = rows[0];
+  const profile = await getOwnedProfileRow(existing.profile_id, req.account.id);
   const programData = generateProgram(profile);
   const insertResult = await query('INSERT INTO tpb_programs (profile_id, program_data) VALUES ($1, $2) RETURNING id', [existing.profile_id, JSON.stringify(programData)]);
   res.json({ program_id: insertResult.rows[0].id, profile_id: existing.profile_id, ...programData });
@@ -154,6 +214,9 @@ app.post('/api/log-session', asyncRoute(async (req, res) => {
 
   if (!program_id || !week_number || !day_name || !exercise) {
     return res.status(400).json({ error: 'program_id, week_number, day_name, and exercise are required.' });
+  }
+  if (!(await getOwnedProgramRow(program_id, req.account.id))) {
+    return res.status(404).json({ error: 'Program not found.' });
   }
 
   const insertResult = await query(
@@ -192,12 +255,21 @@ app.post('/api/log-session', asyncRoute(async (req, res) => {
 }));
 
 app.get('/api/sessions/:program_id', asyncRoute(async (req, res) => {
+  if (!(await getOwnedProgramRow(req.params.program_id, req.account.id))) {
+    return res.status(404).json({ error: 'Program not found.' });
+  }
   const { rows } = await query('SELECT * FROM tpb_sessions WHERE program_id = $1 ORDER BY week_number ASC, logged_at ASC', [req.params.program_id]);
   res.json(rows);
 }));
 
 app.put('/api/session/:session_id', asyncRoute(async (req, res) => {
-  const { rows } = await query('SELECT * FROM tpb_sessions WHERE id = $1', [req.params.session_id]);
+  const { rows } = await query(
+    `SELECT s.* FROM tpb_sessions s
+     JOIN tpb_programs p ON p.id = s.program_id
+     JOIN tpb_profiles pr ON pr.id = p.profile_id
+     WHERE s.id = $1 AND pr.account_id = $2`,
+    [req.params.session_id, req.account.id]
+  );
   if (!rows.length) return res.status(404).json({ error: 'Session not found.' });
   const existing = rows[0];
   const fields = ['actual_sets', 'actual_reps', 'actual_rpe', 'actual_weight', 'notes', 'completed'];
@@ -213,6 +285,9 @@ app.put('/api/session/:session_id', asyncRoute(async (req, res) => {
 // ---------------- Progress Analytics ----------------
 
 app.get('/api/progress/:program_id', asyncRoute(async (req, res) => {
+  if (!(await getOwnedProgramRow(req.params.program_id, req.account.id))) {
+    return res.status(404).json({ error: 'Program not found.' });
+  }
   const { rows } = await query('SELECT * FROM tpb_sessions WHERE program_id = $1', [req.params.program_id]);
   res.json(buildAnalytics(rows));
 }));
@@ -220,11 +295,17 @@ app.get('/api/progress/:program_id', asyncRoute(async (req, res) => {
 app.get('/api/compare/:program_id', asyncRoute(async (req, res) => {
   const { week1, week2 } = req.query;
   if (!week1 || !week2) return res.status(400).json({ error: 'week1 and week2 query params are required.' });
+  if (!(await getOwnedProgramRow(req.params.program_id, req.account.id))) {
+    return res.status(404).json({ error: 'Program not found.' });
+  }
   const { rows } = await query('SELECT * FROM tpb_sessions WHERE program_id = $1', [req.params.program_id]);
   res.json(compareWeeks(rows, week1, week2));
 }));
 
 app.get('/api/export/:program_id', asyncRoute(async (req, res) => {
+  if (!(await getOwnedProgramRow(req.params.program_id, req.account.id))) {
+    return res.status(404).json({ error: 'Program not found.' });
+  }
   const format = (req.query.format || 'csv').toLowerCase();
   const { rows } = await query('SELECT * FROM tpb_sessions WHERE program_id = $1 ORDER BY week_number, logged_at', [req.params.program_id]);
 

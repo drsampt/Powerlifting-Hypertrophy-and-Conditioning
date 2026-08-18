@@ -50,10 +50,15 @@ function renderNav() {
     <div class="item" style="cursor:default;color:var(--text-dim)">
       ${State.program ? `${State.program.sport} · ${State.program.total_weeks}wk · #${State.program.program_id}` : 'None loaded'}
     </div>
+    <h3>Account</h3>
+    <div class="item" style="cursor:default;color:var(--text-dim)">${AuthState.account ? (AuthState.account.name || AuthState.account.email) : ''}</div>
+    <div class="item" id="logout-item">Log Out</div>
   `;
   sidebar.querySelectorAll('.item[data-view]').forEach(el => {
     el.addEventListener('click', () => { setView(el.dataset.view); closeSidebar(); });
   });
+  const logoutItem = document.getElementById('logout-item');
+  if (logoutItem) logoutItem.addEventListener('click', () => { logOut(); closeSidebar(); });
 }
 
 function render() {
@@ -254,5 +259,5 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('sidebar-backdrop').classList.toggle('open');
   });
   document.getElementById('sidebar-backdrop').addEventListener('click', closeSidebar);
-  render();
+  initAuth();
 });

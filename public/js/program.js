@@ -8,7 +8,7 @@ function renderProgram(main) {
   const p = State.program;
   main.innerHTML = `
     <h1>${p.sport[0].toUpperCase() + p.sport.slice(1)} Program</h1>
-    <p class="subtitle">#${p.program_id} · ${p.periodization_type} · ${p.total_weeks} weeks · Deloads: wk ${p.deload_weeks.join(', ')} · Testing wk ${p.testing_week}${p.workout_duration_min ? ` · Target session: ${p.workout_duration_min}-${p.workout_duration_max} min` : ''}</p>
+    <p class="subtitle">#${p.program_id} · ${p.periodization_type} · ${p.total_weeks} weeks · Deloads: wk ${p.deload_weeks.join(', ')}${p.overreach_week ? ` · Overreach wk ${p.overreach_week}` : ''}${p.taper_weeks && p.taper_weeks.length ? ` · Taper wk ${p.taper_weeks[0]}-${p.taper_weeks[p.taper_weeks.length - 1]}` : ''} · Testing wk ${p.testing_week}${p.workout_duration_min ? ` · Target session: ${p.workout_duration_min}-${p.workout_duration_max} min` : ''}</p>
     <div class="tabs">
       <button data-tab="overview" class="${ProgramView.activeTab === 'overview' ? 'active' : ''}">Overview</button>
       <button data-tab="week" class="${ProgramView.activeTab === 'week' ? 'active' : ''}">Week View</button>
@@ -68,10 +68,12 @@ function renderWeekTab(content, p) {
     <div class="week-nav">
       <label style="margin:0">Week</label>
       <select id="week-select">
-        ${allWeeks.map(w => `<option value="${w.week}" ${w.week === current.week ? 'selected' : ''}>Week ${w.week} — ${w.phaseName}${p.deload_weeks.includes(w.week) ? ' (Deload)' : ''}</option>`).join('')}
+        ${allWeeks.map(w => `<option value="${w.week}" ${w.week === current.week ? 'selected' : ''}>Week ${w.week} — ${w.phaseName}${p.deload_weeks.includes(w.week) ? ' (Deload)' : ''}${p.overreach_week === w.week ? ' (Overreach)' : ''}${(p.taper_weeks || []).includes(w.week) ? ' (Taper)' : ''}</option>`).join('')}
       </select>
       <button class="btn secondary" id="print-week">Print This Week</button>
     </div>
+    ${weekData.overreach ? `<p class="help">Overreach week: volume is intentionally pushed above normal to trigger a bigger supercompensation before the taper begins.</p>` : ''}
+    ${weekData.taper ? `<p class="help">Taper week: volume drops first, intensity stays high, and accessory work is dropped for specificity — only the competition lifts remain, at low reps, as the test approaches.</p>` : ''}
     <div id="week-days">
       ${weekData.days.map(day => `
         <div class="day-block">

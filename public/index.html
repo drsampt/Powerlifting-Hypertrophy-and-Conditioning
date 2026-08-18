@@ -7,7 +7,8 @@
 <link rel="stylesheet" href="/styles/main.css" />
 </head>
 <body>
-  <div id="app">
+  <div id="auth-gate" style="display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px"></div>
+  <div id="app" style="display:none">
     <header class="app-header">
       <button id="hamburger" class="hamburger" aria-label="Menu">☰</button>
       <div class="logo">Training Program Builder</div>
@@ -22,6 +23,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js"></script>
   <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
   <script src="/js/program.js"></script>
   <script src="/js/logger.js"></script>
   <script src="/js/analytics.js"></script>
