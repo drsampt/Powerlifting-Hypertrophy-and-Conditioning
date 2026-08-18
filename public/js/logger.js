@@ -62,7 +62,8 @@ function renderLogger(main) {
                 <div class="field"><label>Actual RPE</label><input name="actual_rpe" type="number" step="0.5" min="1" max="10" placeholder="e.g. 8" /></div>
               </div>
               <div class="field"><label>Notes (fatigue, form, equipment, recovery)</label><textarea name="notes" rows="2"></textarea></div>
-              <label style="display:flex;align-items:center;gap:8px;margin-bottom:14px"><input type="checkbox" name="movement_changed" style="width:auto" /> Movement/variation changed from what's prescribed</label>
+              <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><input type="checkbox" name="movement_changed" style="width:auto" /> Movement/variation changed from what's prescribed</label>
+              <label style="display:flex;align-items:center;gap:8px;margin-bottom:14px"><input type="checkbox" name="record_as_max" style="width:auto" /> Record this weight/reps as ${ex.name}'s tested max (used to compute future weights for this exercise)</label>
               <button type="submit" class="btn">Log Session</button>
             </form>
           ` : `<div class="empty">No exercises for this day.</div>`}
@@ -108,12 +109,13 @@ function renderLogger(main) {
         actual_weight: fd.get('actual_weight') ? Number(fd.get('actual_weight')) : null,
         actual_rpe: fd.get('actual_rpe') ? Number(fd.get('actual_rpe')) : null,
         notes: fd.get('notes') || null,
-        movement_changed: fd.get('movement_changed') === 'on'
+        movement_changed: fd.get('movement_changed') === 'on',
+        record_as_max: fd.get('record_as_max') === 'on'
       };
       try {
         const result = await Api.logSession(payload);
         LoggerView.lastResult = result;
-        toast(`Logged! Next: ${result.next_weight_recommendation} lbs`);
+        toast(payload.record_as_max ? `Logged! Max updated. Next: ${result.next_weight_recommendation} lbs` : `Logged! Next: ${result.next_weight_recommendation} lbs`);
         renderLogger(main);
       } catch (err) {
         toast(`Error: ${err.message}`);

@@ -56,6 +56,10 @@ const Api = (() => {
     compareWeeks: (programId, w1, w2) => req('GET', `/api/compare/${programId}?week1=${w1}&week2=${w2}`),
 
     getExercises: (sport) => req('GET', `/api/exercises${sport ? `?sport=${encodeURIComponent(sport)}` : ''}`),
-    getVariations: (exercise) => req('GET', `/api/exercise-variations/${encodeURIComponent(exercise)}`)
+    getVariations: (exercise) => req('GET', `/api/exercise-variations/${encodeURIComponent(exercise)}`),
+
+    getExerciseMaxes: () => req('GET', '/api/exercise-maxes'),
+    setExerciseMax: (data) => req('POST', '/api/exercise-maxes', data),
+    deleteExerciseMax: (name) => req('DELETE', `/api/exercise-maxes/${encodeURIComponent(name)}`)
   };
 })();

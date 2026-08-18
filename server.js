@@ -8,6 +8,7 @@ const { query } = require('./lib/db');
 const { seedExercisesIfEmpty } = require('./lib/seedExercises');
 const { generateProgram } = require('./lib/periodization');
 const { computeAdjustment } = require('./lib/adjustment');
+const { epley1RM } = require('./lib/loadCalc');
 const { buildAnalytics, compareWeeks } = require('./lib/analytics');
 const { getSportExercises, getSubstitutions } = require('./lib/exercises');
 const { createAccount, findAccountByEmail, verifyPassword, createSessionToken, deleteToken, requireAuth } = require('./lib/auth');
@@ -96,6 +97,47 @@ app.use('/api/session', requireAuth);
 app.use('/api/progress', requireAuth);
 app.use('/api/compare', requireAuth);
 app.use('/api/export', requireAuth);
+app.use('/api/exercise-maxes', requireAuth);
+
+// ---------------- Exercise Maxes (per-exercise tested weight, not inferred from SBD) ----------------
+
+async function getExerciseMaxesMap(accountId) {
+  const { rows } = await query('SELECT exercise_name, estimated_1rm FROM tpb_exercise_maxes WHERE account_id = $1', [accountId]);
+  const map = {};
+  for (const row of rows) map[row.exercise_name] = row.estimated_1rm;
+  return map;
+}
+
+app.get('/api/exercise-maxes', asyncRoute(async (req, res) => {
+  const { rows } = await query(
+    'SELECT exercise_name, weight, reps, estimated_1rm, source, updated_at FROM tpb_exercise_maxes WHERE account_id = $1 ORDER BY exercise_name',
+    [req.account.id]
+  );
+  res.json(rows);
+}));
+
+app.post('/api/exercise-maxes', asyncRoute(async (req, res) => {
+  const { exercise_name, weight, reps } = req.body;
+  const w = Number(weight);
+  const r = Number(reps) || 1;
+  if (!exercise_name || !Number.isFinite(w) || w <= 0) {
+    return res.status(400).json({ error: 'exercise_name and a positive weight are required.' });
+  }
+  const estimated_1rm = epley1RM(w, r);
+  const { rows } = await query(
+    `INSERT INTO tpb_exercise_maxes (account_id, exercise_name, weight, reps, estimated_1rm, source, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, now())
+     ON CONFLICT (account_id, exercise_name) DO UPDATE SET weight = $3, reps = $4, estimated_1rm = $5, source = $6, updated_at = now()
+     RETURNING exercise_name, weight, reps, estimated_1rm, source, updated_at`,
+    [req.account.id, exercise_name, w, r, estimated_1rm, req.body.source === 'tested' ? 'tested' : 'manual']
+  );
+  res.json(rows[0]);
+}));
+
+app.delete('/api/exercise-maxes/:exercise_name', asyncRoute(async (req, res) => {
+  await query('DELETE FROM tpb_exercise_maxes WHERE account_id = $1 AND exercise_name = $2', [req.account.id, req.params.exercise_name]);
+  res.json({ deleted: true });
+}));
 
 // ---------------- Profile Management ----------------
 
@@ -167,6 +209,7 @@ app.post('/api/generate-program', asyncRoute(async (req, res) => {
   const { profile_id } = req.body;
   const profile = await getOwnedProfileRow(profile_id, req.account.id);
   if (!profile) return res.status(404).json({ error: 'Profile not found.' });
+  profile.exercise_maxes = await getExerciseMaxesMap(req.account.id);
 
   const programData = generateProgram(profile);
   const insertResult = await query(
@@ -222,6 +265,7 @@ app.post('/api/program/:program_id/clone', asyncRoute(async (req, res) => {
   const existing = await getOwnedProgramRow(req.params.program_id, req.account.id);
   if (!existing) return res.status(404).json({ error: 'Program not found.' });
   const profile = await getOwnedProfileRow(existing.profile_id, req.account.id);
+  profile.exercise_maxes = await getExerciseMaxesMap(req.account.id);
   const programData = generateProgram(profile);
   const insertResult = await query('INSERT INTO tpb_programs (profile_id, program_data) VALUES ($1, $2) RETURNING id', [existing.profile_id, JSON.stringify(programData)]);
   res.json({ program_id: insertResult.rows[0].id, profile_id: existing.profile_id, ...programData });
@@ -234,7 +278,7 @@ app.post('/api/log-session', asyncRoute(async (req, res) => {
     program_id, week_number, day_name, exercise,
     prescribed_sets, prescribed_reps, prescribed_rpe, prescribed_weight,
     actual_sets, actual_reps, actual_rpe, actual_weight,
-    notes, completed, movement_changed
+    notes, completed, movement_changed, record_as_max
   } = req.body;
 
   if (!program_id || !week_number || !day_name || !exercise) {
@@ -269,6 +313,16 @@ app.post('/api/log-session', asyncRoute(async (req, res) => {
     recentSessions,
     movementChanged: !!movement_changed
   });
+
+  if (record_as_max && actual_weight && actual_reps) {
+    const estimated_1rm = epley1RM(Number(actual_weight), Number(actual_reps));
+    await query(
+      `INSERT INTO tpb_exercise_maxes (account_id, exercise_name, weight, reps, estimated_1rm, source, updated_at)
+       VALUES ($1, $2, $3, $4, $5, 'tested', now())
+       ON CONFLICT (account_id, exercise_name) DO UPDATE SET weight = $3, reps = $4, estimated_1rm = $5, source = 'tested', updated_at = now()`,
+      [req.account.id, exercise, actual_weight, actual_reps, estimated_1rm]
+    );
+  }
 
   res.json({
     session_id,

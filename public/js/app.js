@@ -32,6 +32,7 @@ function renderNav() {
     ['setup', 'New Program'],
     ['program', 'Program'],
     ['logger', 'Log Session'],
+    ['maxes', 'Exercise Maxes'],
     ['analytics', 'Analytics'],
     ['manage', 'Manage']
   ];
@@ -68,6 +69,7 @@ function render() {
   if (State.view === 'setup') return renderSetup(main);
   if (State.view === 'program') return renderProgram(main);
   if (State.view === 'logger') return renderLogger(main);
+  if (State.view === 'maxes') return renderMaxes(main);
   if (State.view === 'analytics') return renderAnalytics(main);
   if (State.view === 'manage') return renderManage(main);
 }
