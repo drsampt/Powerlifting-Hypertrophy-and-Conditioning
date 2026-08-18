@@ -79,6 +79,7 @@ function renderWeekTab(content, p) {
       ${weekData.days.map(day => `
         <div class="day-block">
           <h4><span>${day.day_name} — ${day.workout_type}</span>${day.estimated_minutes ? `<span class="badge blue">~${day.estimated_minutes} min</span>` : ''}</h4>
+          ${day.exercises.length ? `<button class="btn secondary" data-start-workout="${day.day_name}" style="margin-bottom:10px">Start Workout →</button>` : ''}
           ${day.exercises.map(ex => `
             <div class="exercise-row">
               <span class="name">${ex.name}</span>
@@ -103,6 +104,9 @@ function renderWeekTab(content, p) {
     renderProgram(document.getElementById('main'));
   });
   document.getElementById('print-week').addEventListener('click', () => window.print());
+  content.querySelectorAll('[data-start-workout]').forEach(btn => btn.addEventListener('click', () => {
+    startWorkout(p, current.week, btn.dataset.startWorkout);
+  }));
 }
 
 async function renderLibraryTab(content, p) {
